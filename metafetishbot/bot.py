@@ -1,10 +1,9 @@
 from telegram.ext import Updater, MessageHandler, Filters, CommandHandler
 from .permissioncommandhandler import PermissionCommandHandler
-from .definitions import DefinitionManager
 from .users import UserManager
 from .groups import GroupManager
 from .conversations import ConversationManager
-from queue import Queue
+from .mowcounter import MowCounter
 from threading import Thread
 import argparse
 import os
@@ -12,7 +11,7 @@ import logging
 from functools import partial
 
 
-class MetafetishTelegramBot(object):
+class MowCounterTelegramBot(object):
     FLAGS = ["admin", "def_edit", "user_flags"]
 
     def __init__(self, dbdir, tg_token):
@@ -24,13 +23,18 @@ class MetafetishTelegramBot(object):
         self.dispatcher = self.updater.dispatcher
         self.conversations = ConversationManager()
         self.users = UserManager(dbdir, self.conversations)
-        self.definitions = DefinitionManager(dbdir, self.conversations)
         self.groups = GroupManager(dbdir)
+        self.mow = MowCounter(dbdir, self.conversations)
 
-        self.modules = [self.users, self.definitions, self.groups]
+        self.modules = [self.users, self.groups, self.mow]
 
-        self.dispatcher.add_handler(MessageHandler([Filters.text],
-                                                   self.handle_message))
+        # Make sure the message handlers are in different groups so they are
+        # always run
+        self.dispatcher.add_handler(MessageHandler([Filters.text, Filters.sticker],
+                                                   self.handle_message), group=1)
+
+        self.dispatcher.add_handler(MessageHandler([Filters.text, Filters.sticker],
+                                                   self.handle_mow), group=2)
 
         # Default commands
         self.dispatcher.add_handler(PermissionCommandHandler('start',
@@ -47,62 +51,6 @@ class MetafetishTelegramBot(object):
                                                              self.handle_settings))
         self.dispatcher.add_handler(CommandHandler('cancel',
                                                    self.handle_cancel))
-
-        # User module commands
-        self.dispatcher.add_handler(PermissionCommandHandler('userhelp',
-                                                             [self.require_group,
-                                                              self.require_privmsg],
-                                                             self.users.help))
-        self.dispatcher.add_handler(PermissionCommandHandler('usershowprofile',
-                                                             [self.require_group,
-                                                              self.require_privmsg,
-                                                              self.try_register],
-                                                             partial(self.users.show_profile, show_profile=True)))
-        self.dispatcher.add_handler(PermissionCommandHandler('userhideprofile',
-                                                             [self.require_group,
-                                                              self.require_privmsg,
-                                                              self.try_register],
-                                                             partial(self.users.show_profile, show_profile=False)))
-        self.dispatcher.add_handler(PermissionCommandHandler('useraddfield',
-                                                             [self.require_group,
-                                                              self.require_privmsg,
-                                                              self.try_register],
-                                                             self.users.add_field))
-        self.dispatcher.add_handler(PermissionCommandHandler('userrmfield',
-                                                             [self.require_group,
-                                                              self.require_privmsg,
-                                                              self.try_register],
-                                                             self.users.remove_field))
-        self.dispatcher.add_handler(PermissionCommandHandler('userprofile',
-                                                             [self.require_group,
-                                                              self.require_privmsg,
-                                                              self.try_register],
-                                                             self.users.get_fields))
-
-        # Definition module commands
-        self.dispatcher.add_handler(PermissionCommandHandler('def',
-                                                             [self.require_group,
-                                                              self.try_register],
-                                                             self.definitions.show))
-        self.dispatcher.add_handler(PermissionCommandHandler('deflist',
-                                                             [self.require_group,
-                                                              self.try_register],
-                                                             self.definitions.list))
-        self.dispatcher.add_handler(PermissionCommandHandler('defhelp',
-                                                             [self.require_group,
-                                                              self.require_privmsg,
-                                                              self.try_register],
-                                                             self.definitions.help))
-        self.dispatcher.add_handler(PermissionCommandHandler('defadd',
-                                                             [self.require_group,
-                                                              self.require_privmsg,
-                                                              self.try_register],
-                                                             self.definitions.add))
-        self.dispatcher.add_handler(PermissionCommandHandler('defrm',
-                                                             [self.require_group,
-                                                              self.require_privmsg,
-                                                              self.try_register],
-                                                             self.definitions.rm))
 
         # Admin commands
         self.dispatcher.add_handler(PermissionCommandHandler('userlist',
@@ -136,12 +84,32 @@ class MetafetishTelegramBot(object):
                                                               partial(self.require_flag, flag="admin")],
                                                              self.output_commands))
 
+        # Definition module commands
+        self.dispatcher.add_handler(PermissionCommandHandler('mowtop10',
+                                                             [self.require_group,
+                                                              self.try_register],
+                                                             self.mow.show_top10_count))
+        self.dispatcher.add_handler(PermissionCommandHandler('mowcount',
+                                                             [self.require_group,
+                                                              self.try_register],
+                                                             self.mow.show_own_count))
+        self.dispatcher.add_handler(PermissionCommandHandler('mowaddsticker',
+                                                             [self.try_register,
+                                                              self.require_privmsg,
+                                                              partial(self.require_flag, flag="admin")],
+                                                             self.mow.add_sticker))
+        self.dispatcher.add_handler(PermissionCommandHandler('mowrmsticker',
+                                                             [self.try_register,
+                                                              self.require_privmsg,
+                                                              partial(self.require_flag, flag="admin")],
+                                                             self.mow.rm_sticker))
+
         # On errors, just print to console and hope someone sees it
         self.dispatcher.add_error_handler(self.handle_error)
 
     def handle_start(self, bot, update):
         user_id = update.message.from_user.id
-        start_text = ["Hi! I'm @metafetish_bot, the bot for the Metafetish Telegram Group Network.", ""]
+        start_text = ["Hi! I'm @metafetish_bot, the bot for the MowCounter Telegram Group Network.", ""]
         should_help = False
         if len(self.groups.get_groups()) > 0 and not self.groups.user_in_groups(bot, user_id):
             start_text += ["Before we get started, you'll need to join one of the following groups:"]
@@ -162,12 +130,14 @@ class MetafetishTelegramBot(object):
         if (len(self.groups.get_groups()) > 0 and not self.groups.user_in_groups(bot, user_id)) or not self.users.is_valid_user(user_id):
             self.handle_start(bot, update)
             return
-        help_text = ["Hi! I'm @metafetish_bot, the bot for the Metafetish Telegram Group Network.",
+        help_text = ["Hi! I'm @mowcounter_bot, the bot that counts mows.",
+                     "",
+                     "If you mow in a channel I'm in, I count it. The end.", 
                      "",
                      "Here's a list of commands I support:",
                      "",
-                     self.definitions.commands(),
-                     self.users.commands()]
+                     "/mowcount - show how many times you've mowed.",
+                     "/mowtop10 - show mow high score table."]
         bot.sendMessage(update.message.chat.id,
                         "\n".join(help_text),
                         parse_mode="HTML")
@@ -236,6 +206,12 @@ class MetafetishTelegramBot(object):
         self.try_register(bot, update)
         self.handle_help(bot, update)
 
+    def handle_mow(self, bot, update):
+        # Ignore messages not in groups
+        # if update.message.chat.id > 0:
+        #     return
+        self.mow.check_mows(bot, update)
+
     def handle_cancel(self, bot, update):
         if update.message.chat.id < 0:
             return
@@ -256,7 +232,7 @@ class MetafetishTelegramBot(object):
             m.shutdown()
 
 
-class MetafetishTelegramBotCLI(MetafetishTelegramBot):
+class MowCounterTelegramBotCLI(MowCounterTelegramBot):
     def __init__(self):
         parser = argparse.ArgumentParser()
         parser.add_argument("-d", "--dbdir", dest="dbdir",
@@ -284,7 +260,7 @@ class MetafetishTelegramBotCLI(MetafetishTelegramBot):
         super().__init__(args.dbdir, tg_token)
 
 
-class MetafetishTelegramBotThread(MetafetishTelegramBot):
+class MowCounterTelegramBotThread(MowCounterTelegramBot):
     def __init__(self, dbdir, tg_token):
         super().__init__(dbdir, tg_token)
         # Steal the queue from the updater.
