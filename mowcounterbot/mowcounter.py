@@ -79,15 +79,14 @@ class MowCounter(MetafetishPickleDBBase):
         self.cm.add(update, c)
 
     def check_mows(self, bot, update):
-        self.logger.warn("CALLING MOW COUNTER")
         user_id = str(update.message.from_user.id)
         chat_id = str(update.message.chat.id)
         user = update.message.from_user
         mows = 0
         # The API tests for text as either text or '', not None. God damnit.
         if len(update.message.text) is not 0:
-            # count mows
-            mows = update.message.text.lower().count("mow")
+            # count mows. Maximum one mow per message
+            mows = 1 if update.message.text.lower().count("mow") else 0
         elif update.message.sticker is not None:
             sticker = update.message.sticker
             if sticker.file_id in self.stickers:
