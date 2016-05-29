@@ -108,31 +108,12 @@ class MowCounterTelegramBot(object):
         self.dispatcher.add_error_handler(self.handle_error)
 
     def handle_start(self, bot, update):
-        user_id = update.message.from_user.id
-        start_text = ["Hi! I'm @metafetish_bot, the bot for the MowCounter Telegram Group Network.", ""]
-        should_help = False
-        if len(self.groups.get_groups()) > 0 and not self.groups.user_in_groups(bot, user_id):
-            start_text += ["Before we get started, you'll need to join one of the following groups:"]
-            for g in self.groups.get_groups():
-                start_text += ["- %s" % (g)]
-            start_text += ["Once you've joined, message me with /start again and we can continue!"]
-        else:
-            start_text += ["It looks like you're in one of my groups, so let's get started!", ""]
-            should_help = True
-
-        bot.sendMessage(update.message.chat.id,
-                        "\n".join(start_text))
-        if should_help:
-            self.handle_help(bot, update)
+        self.handle_help(bot, update)
 
     def handle_help(self, bot, update):
-        user_id = update.message.from_user.id
-        if (len(self.groups.get_groups()) > 0 and not self.groups.user_in_groups(bot, user_id)) or not self.users.is_valid_user(user_id):
-            self.handle_start(bot, update)
-            return
         help_text = ["Hi! I'm @mowcounter_bot, the bot that counts mows.",
                      "",
-                     "If you mow in a channel I'm in, I count it. The end.", 
+                     "If you mow in a channel I'm in, I count it. The end.",
                      "",
                      "Here's a list of commands I support:",
                      "",
