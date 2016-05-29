@@ -1,5 +1,9 @@
-# Metafetish Telegram Bot
+# Mowcounter Telegram Bot
 
-Code for the bot on the [Metafetish Telegram Channel](http://telegram.me/metafetish). 
+Code for the Mow Counter bot on telegram (http://telegram.me/mowcounter_bot). 
 
-Based on [python-telegram-bot](http://github.com/python-telegram-bot/python-telegram-bot)
+Forked from the
+[metafetish-telegram-bot](http://github.com/metafetish/metafetish-telegram-bot)
+repo.
+
+Based on [python-telegram-bot](http://github.com/python-telegram-bot/python-telegram-bot) API.
