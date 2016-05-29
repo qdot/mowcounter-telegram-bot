@@ -165,6 +165,9 @@ class MowCounter(MetafetishPickleDBBase):
         self.db.dump()
 
     def list_groups(self, bot, update):
+        group_names = []
+        for g in self.mowgroups.keys():
+            chat = bot.getChat(g)
+            group_names.append("%s - @%s - %s %s - %s" % (chat.title, chat.username, chat.first_name, chat.last_name, g))
         bot.sendMessage(update.message.chat.id,
-                        text="Groups I am currently counting mows in:\n %s" % "".join(["%s\n" % (x) for x in self.mowgroups.keys()]))
-
+                        text="Groups I am currently counting mows in:\n %s" % "".join(group_names))
