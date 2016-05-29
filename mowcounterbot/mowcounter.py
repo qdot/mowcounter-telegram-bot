@@ -22,14 +22,6 @@ class MowCounter(MetafetishPickleDBBase):
         self.mowgroups = self.db.dgetall("mowgroups")
         self.cm = cm
 
-    def reset_conversation(self, bot, update):
-        pass
-
-    def reset(self, bot, update):
-        c = self.reset_conversation(bot, update)
-        c.send(None)
-        self.cm.add(c)
-
     def add_sticker_conversation(self, bot, update):
         sticker = None
         while True:
@@ -233,6 +225,16 @@ class MowCounter(MetafetishPickleDBBase):
                     continue
         bot.sendMessage(update.message.chat.id,
                         text="Sticker review done!")
+
+    def reset(self, bot, update):
+        for u in self.mowers.keys():
+            self.mowers = {}
+        for g in self.mowgroups.keys():
+            for u in self.mowgroups[g].keys():
+                self.mowgroups[g] = {}
+        self.db.dump()
+        bot.sendMessage(update.message.chat.id,
+                        text="Mow counts reset!")
 
     def review_stickers(self, bot, update):
         c = self.review_stickers_conversation(bot, update)

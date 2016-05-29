@@ -70,14 +70,10 @@ class MowCounterTelegramBot(object):
         self.dispatcher.add_handler(PermissionCommandHandler('mowcount',
                                                              [],
                                                              self.mow.show_own_count))
-        self.dispatcher.add_handler(PermissionCommandHandler('mowaddsticker',
+        self.dispatcher.add_handler(PermissionCommandHandler('mowreset',
                                                              [self.require_privmsg,
                                                               partial(self.require_flag, flag="admin")],
-                                                             self.mow.add_sticker))
-        self.dispatcher.add_handler(PermissionCommandHandler('mowrmsticker',
-                                                             [self.require_privmsg,
-                                                              partial(self.require_flag, flag="admin")],
-                                                             self.mow.rm_sticker))
+                                                             self.mow.reset))
         self.dispatcher.add_handler(PermissionCommandHandler('mowrequeststicker',
                                                              [self.require_privmsg],
                                                              self.mow.request_sticker))
