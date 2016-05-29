@@ -172,3 +172,29 @@ class MowCounter(MetafetishPickleDBBase):
             group_names.append("%s - @%s - %s %s - %s" % (chat.title, chat.username, chat.first_name, chat.last_name, g))
         bot.sendMessage(update.message.chat.id,
                         text="Groups I am currently counting mows in:\n %s" % "\n".join(group_names))
+
+    def list_stickers(self, bot, update):
+        pass
+        # bot.sendMessage(update.message.chat.id,
+        #                 text="Here's the list of stickers that count for/against mow counts:")
+        # for s in self.stickers():
+
+    def request_sticker(self, bot, update):
+        pass
+
+    def review_stickers(self, bot, update):
+        pass
+
+    def broadcast_message_conversation(self, bot, update):
+        bot.sendMessage(update.message.chat.id,
+                        text="What message would you like to broadcast to groups I'm in?")
+        (bot, update) = yield
+        message = update.message.text
+        for g in self.mowgroups.keys():
+            bot.sendMessage(g,
+                            text=message)
+
+    def broadcast_message(self, bot, update):
+        c = self.broadcast_message_conversation(bot, update)
+        c.send(None)
+        self.cm.add(update, c)

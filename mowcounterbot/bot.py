@@ -78,10 +78,24 @@ class MowCounterTelegramBot(object):
                                                              [self.require_privmsg,
                                                               partial(self.require_flag, flag="admin")],
                                                              self.mow.rm_sticker))
+        self.dispatcher.add_handler(PermissionCommandHandler('mowrequeststicker',
+                                                             [self.require_privmsg],
+                                                             self.mow.request_sticker))
+        self.dispatcher.add_handler(PermissionCommandHandler('mowstickers',
+                                                             [self.require_privmsg],
+                                                             self.mow.list_stickers))
+        self.dispatcher.add_handler(PermissionCommandHandler('mowreviewstickers',
+                                                             [self.require_privmsg,
+                                                              partial(self.require_flag, flag="admin")],
+                                                             self.mow.review_stickers))
         self.dispatcher.add_handler(PermissionCommandHandler('mowgroups',
                                                              [self.require_privmsg,
                                                               partial(self.require_flag, flag="admin")],
                                                              self.mow.list_groups))
+        self.dispatcher.add_handler(PermissionCommandHandler('mowbroadcast',
+                                                             [self.require_privmsg,
+                                                              partial(self.require_flag, flag="admin")],
+                                                             self.mow.broadcast_message))
 
         # On errors, just print to console and hope someone sees it
         self.dispatcher.add_error_handler(self.handle_error)
@@ -98,7 +112,8 @@ class MowCounterTelegramBot(object):
                      "Here's a list of commands I support:",
                      "",
                      "/mowcount - show how many times you've mowed.",
-                     "/mowtop10 - show mow high score table."]
+                     "/mowtop10 - show mow high score table.",
+                     "/mowrequeststicker - request a sticker be added to count for mows."]
         bot.sendMessage(update.message.chat.id,
                         "\n".join(help_text),
                         parse_mode="HTML",
