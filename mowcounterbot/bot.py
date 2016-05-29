@@ -120,13 +120,18 @@ class MowCounterTelegramBot(object):
                      "",
                      "If you mow in a channel I'm in, I count it. The end.",
                      "",
+                     "I'm open to be invited to any channel, so if you have a place that needs mows counted, just invite me!",
+                     "",
+                     "If you have any questions, my owner is @qdot76367. I'm an open source bot, too! Feel free to run your own. http://github.com/qdot/mow-counter-bot/",
+                     "",
                      "Here's a list of commands I support:",
                      "",
                      "/mowcount - show how many times you've mowed.",
                      "/mowtop10 - show mow high score table."]
         bot.sendMessage(update.message.chat.id,
                         "\n".join(help_text),
-                        parse_mode="HTML")
+                        parse_mode="HTML",
+                        disable_web_page_preview=True)
 
     def handle_settings(self, bot, update):
         pass
