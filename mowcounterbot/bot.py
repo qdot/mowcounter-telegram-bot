@@ -1,7 +1,6 @@
 from telegram.ext import Updater, MessageHandler, Filters, CommandHandler
 from .permissioncommandhandler import PermissionCommandHandler
 from .users import UserManager
-from .groups import GroupManager
 from .conversations import ConversationManager
 from .mowcounter import MowCounter
 from threading import Thread
@@ -23,7 +22,6 @@ class MowCounterTelegramBot(object):
         self.dispatcher = self.updater.dispatcher
         self.conversations = ConversationManager()
         self.users = UserManager(dbdir, self.conversations)
-        self.groups = GroupManager(dbdir)
         self.mow = MowCounter(dbdir, self.conversations)
 
         self.modules = [self.users, self.groups, self.mow]
@@ -38,17 +36,14 @@ class MowCounterTelegramBot(object):
 
         # Default commands
         self.dispatcher.add_handler(PermissionCommandHandler('start',
-                                                             [self.try_register,
-                                                              self.require_privmsg],
-                                                             self.handle_start))
+                                                             [self.require_privmsg],
+                                                             self.handle_help))
         self.dispatcher.add_handler(PermissionCommandHandler('help',
-                                                             [self.try_register,
-                                                              self.require_privmsg],
+                                                             [self.require_privmsg],
                                                              self.handle_help))
         self.dispatcher.add_handler(PermissionCommandHandler('settings',
-                                                             [self.try_register,
-                                                              self.require_privmsg],
-                                                             self.handle_settings))
+                                                             [self.require_privmsg],
+                                                             self.handle_help))
         self.dispatcher.add_handler(CommandHandler('cancel',
                                                    self.handle_cancel))
 
@@ -68,52 +63,28 @@ class MowCounterTelegramBot(object):
                                                               self.require_privmsg,
                                                               partial(self.require_flag, flag="admin")],
                                                              self.users.remove_flag))
-        self.dispatcher.add_handler(PermissionCommandHandler('groupadd',
-                                                             [self.try_register,
-                                                              self.require_privmsg,
-                                                              partial(self.require_flag, flag="admin")],
-                                                             self.groups.add_group))
-        self.dispatcher.add_handler(PermissionCommandHandler('grouprm',
-                                                             [self.try_register,
-                                                              self.require_privmsg,
-                                                              partial(self.require_flag, flag="admin")],
-                                                             self.groups.rm_group))
-        self.dispatcher.add_handler(PermissionCommandHandler('outputcommands',
-                                                             [self.try_register,
-                                                              self.require_privmsg,
-                                                              partial(self.require_flag, flag="admin")],
-                                                             self.output_commands))
-
         # Definition module commands
         self.dispatcher.add_handler(PermissionCommandHandler('mowtop10',
-                                                             [self.require_group,
-                                                              self.try_register],
+                                                             [],
                                                              self.mow.show_top10_count))
         self.dispatcher.add_handler(PermissionCommandHandler('mowcount',
-                                                             [self.require_group,
-                                                              self.try_register],
+                                                             [],
                                                              self.mow.show_own_count))
         self.dispatcher.add_handler(PermissionCommandHandler('mowaddsticker',
-                                                             [self.try_register,
-                                                              self.require_privmsg,
+                                                             [self.require_privmsg,
                                                               partial(self.require_flag, flag="admin")],
                                                              self.mow.add_sticker))
         self.dispatcher.add_handler(PermissionCommandHandler('mowrmsticker',
-                                                             [self.try_register,
-                                                              self.require_privmsg,
+                                                             [self.require_privmsg,
                                                               partial(self.require_flag, flag="admin")],
                                                              self.mow.rm_sticker))
         self.dispatcher.add_handler(PermissionCommandHandler('mowgroups',
-                                                             [self.try_register,
-                                                              self.require_privmsg,
+                                                             [self.require_privmsg,
                                                               partial(self.require_flag, flag="admin")],
                                                              self.mow.list_groups))
 
         # On errors, just print to console and hope someone sees it
         self.dispatcher.add_error_handler(self.handle_error)
-
-    def handle_start(self, bot, update):
-        self.handle_help(bot, update)
 
     def handle_help(self, bot, update):
         help_text = ["Hi! I'm @mowcounter_bot, the bot that counts mows.",
@@ -132,9 +103,6 @@ class MowCounterTelegramBot(object):
                         "\n".join(help_text),
                         parse_mode="HTML",
                         disable_web_page_preview=True)
-
-    def handle_settings(self, bot, update):
-        pass
 
     def handle_error(self, bot, update, error):
         self.logger.warn("Exception thrown! %s", self.error)
