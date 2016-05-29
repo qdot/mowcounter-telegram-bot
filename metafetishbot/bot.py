@@ -208,8 +208,8 @@ class MowCounterTelegramBot(object):
 
     def handle_mow(self, bot, update):
         # Ignore messages not in groups
-        # if update.message.chat.id > 0:
-        #     return
+        if update.message.chat.id > 0:
+            return
         self.mow.check_mows(bot, update)
 
     def handle_cancel(self, bot, update):
