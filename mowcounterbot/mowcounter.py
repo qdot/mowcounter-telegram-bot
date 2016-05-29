@@ -5,11 +5,15 @@ class MowCounter(MetafetishPickleDBBase):
     def __init__(self, dbdir, cm):
         # Don't save on every write transactions. Fucking noisy sneps.
         super().__init__(__name__, dbdir, "mowcounter", False)
-        try:
-            self.stickers = self.db.lgetall("stickers")
-        except KeyError:
-            self.db.lcreate("stickers")
-            self.stickers = self.db.lgetall("stickers")
+        self.stickers = self.db.get("stickers")
+        # stickers used to be a list. Now it should be a dict
+        if self.stickers is None or type(self.stickers) is list:
+            self.db.dcreate("stickers")
+            self.stickers = self.db.dgetall("stickers")
+        self.sticker_requests = self.db.get("sticker_requests")
+        if self.sticker_requests is None:
+            self.db.lcreate("sticker_requests")
+            self.sticker_requests = self.db.get("sticker_requests")
         if self.db.get("mowers") is None:
             self.db.dcreate("mowers")
         self.mowers = self.db.dgetall("mowers")
@@ -89,10 +93,11 @@ class MowCounter(MetafetishPickleDBBase):
             mows = 1 if update.message.text.lower().count("mow") else 0
         elif update.message.sticker is not None:
             sticker = update.message.sticker
-            if sticker.file_id in self.stickers:
-                mows = 1
+            # Make sure we have the sticker and it's accepted
+            if sticker.file_id not in self.stickers.keys():
+                return
+            mows = self.stickers[sticker.file_id]
         if mows is 0:
-            self.logger.warn("Got no mows!")
             return
         self.logger.warn("Counted %d mows" % mows)
         if user_id not in self.mowers.keys():
@@ -173,16 +178,66 @@ class MowCounter(MetafetishPickleDBBase):
                         text="Groups I am currently counting mows in:\n %s" % "\n".join(group_names))
 
     def list_stickers(self, bot, update):
-        pass
-        # bot.sendMessage(update.message.chat.id,
-        #                 text="Here's the list of stickers that count for/against mow counts:")
-        # for s in self.stickers():
+        bot.sendMessage(update.message.chat.id,
+                        text="Here's the list of stickers that count for/against mow counts:")
+        for (k, v) in self.stickers.items():
+            bot.sendSticker(update.message.chat.id,
+                            k)
+            bot.sendMessage(update.message.chat.id,
+                            text="^^^^ Sticker Value: %d" % v)
+
+    def request_sticker_conversation(self, bot, update):
+        sticker = None
+        while True:
+            bot.sendMessage(update.message.chat.id,
+                            text="Send me the sticker you'd like to request to be added, or /cancel.")
+            (bot, update) = yield
+            if update.message.sticker is not None:
+                sticker = update.message.sticker
+                break
+            bot.sendMessage(update.message.chat.id,
+                            text="That's not a sticker!")
+        if sticker.file_id in self.stickers.keys() or sticker.file_id in self.sticker_requests:
+            bot.sendMessage(update.message.chat.id,
+                            text="I'm already tracking or waiting to review that sticker!")
+            return
+        self.db.ladd("sticker_requests", sticker.file_id)
+        self.db.dump()
+        bot.sendMessage(update.message.chat.id,
+                        text="Sticker requested! The admins will review the sticker and add it if it is mow-worthy. Thanks!")
 
     def request_sticker(self, bot, update):
-        pass
+        c = self.request_sticker_conversation(bot, update)
+        c.send(None)
+        self.cm.add(update, c)
+
+    def review_stickers_conversation(self, bot, update):
+        while len(self.sticker_requests) > 0:
+            s = self.sticker_requests[0]
+            while True:
+                bot.sendSticker(update.message.chat.id,
+                                s)
+                bot.sendMessage(update.message.chat.id,
+                                text="Send 0 to reject sticker, or a pos/neg int to specify sticker value, or /cancel.")
+                (bot, update) = yield
+                try:
+                    value = int(update.message.text)
+                    if value != 0:
+                        self.stickers[s] = value
+                        bot.sendMessage(update.message.chat.id,
+                                        text="Sticker added with value %d" % value)
+                    self.sticker_requests.remove(s)
+                    self.db.dump()
+                    break
+                except:
+                    continue
+        bot.sendMessage(update.message.chat.id,
+                        text="Sticker review done!")
 
     def review_stickers(self, bot, update):
-        pass
+        c = self.review_stickers_conversation(bot, update)
+        c.send(None)
+        self.cm.add(update, c)
 
     def broadcast_message_conversation(self, bot, update):
         bot.sendMessage(update.message.chat.id,
