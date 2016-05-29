@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 import logging
-from metafetishbot import MowCounterTelegramBotCLI
+from mowcounterbot import MowCounterTelegramBotCLI
 
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
