@@ -145,6 +145,7 @@ class MowCounter(MetafetishPickleDBBase):
 
     def show_top10_count(self, bot, update):
         chat_id = str(update.message.chat.id)
+        grouptop10 = ""
         if chat_id in self.mowgroups.keys():
             groupmowers = sorted(self.mowgroups[chat_id].items(),
                                  key=lambda x: x[1], reverse=True)[:10]

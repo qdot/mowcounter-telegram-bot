@@ -24,7 +24,7 @@ class MowCounterTelegramBot(object):
         self.users = UserManager(dbdir, self.conversations)
         self.mow = MowCounter(dbdir, self.conversations)
 
-        self.modules = [self.users, self.groups, self.mow]
+        self.modules = [self.users, self.mow]
 
         # Make sure the message handlers are in different groups so they are
         # always run
@@ -135,7 +135,7 @@ class MowCounterTelegramBot(object):
     # flag we want to check for.
     def require_flag(self, bot, update, flag):
         user_id = update.message.from_user.id
-        if not self.users.has_flag(user_id, flag):
+        if not self.users.is_valid_user(user_id) or not self.users.has_flag(user_id, flag):
             bot.sendMessage(update.message.chat.id,
                             text="You do not have the required permissions to run this command.")
             return False
