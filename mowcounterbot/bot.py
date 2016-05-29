@@ -103,6 +103,11 @@ class MowCounterTelegramBot(object):
                                                               self.require_privmsg,
                                                               partial(self.require_flag, flag="admin")],
                                                              self.mow.rm_sticker))
+        self.dispatcher.add_handler(PermissionCommandHandler('mowgroups',
+                                                             [self.try_register,
+                                                              self.require_privmsg,
+                                                              partial(self.require_flag, flag="admin")],
+                                                             self.mow.list_groups))
 
         # On errors, just print to console and hope someone sees it
         self.dispatcher.add_error_handler(self.handle_error)
