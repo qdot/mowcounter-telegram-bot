@@ -113,7 +113,7 @@ class MowCounter(MetafetishPickleDBBase):
         if user_id not in self.mowgroups[chat_id].keys():
             self.mowgroups[chat_id][user_id] = mows
         else:
-            self.mowgroups[chat_id][user_id] = mows
+            self.mowgroups[chat_id][user_id] += mows
 
     def dump(self):
         self.db.dump()
