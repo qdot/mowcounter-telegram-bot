@@ -157,7 +157,7 @@ class MowCounter(MetafetishPickleDBBase):
             i += 1
             globaltop10 += "<b>%d.</b> %s %s - %d Mows\n" % (i, mower["first_name"], mower["last_name"], mower["mows"])
         bot.sendMessage(update.message.chat.id,
-                        text=grouptop10 + globaltop10,
+                        text=grouptop10,# + globaltop10,
                         parse_mode="HTML")
         self.db.dump()
 
@@ -254,3 +254,4 @@ class MowCounter(MetafetishPickleDBBase):
         c = self.broadcast_message_conversation(bot, update)
         c.send(None)
         self.cm.add(update, c)
+
