@@ -1,7 +1,7 @@
 from telegram.ext import Updater, MessageHandler, Filters, CommandHandler
 from .permissioncommandhandler import PermissionCommandHandler
 from .users import UserManager
-from .conversations import ConversationManager
+from .conversations import ConversationManager, ConversationHandler
 from .mowcounter import MowCounter
 from threading import Thread
 import argparse
@@ -74,24 +74,27 @@ class MowCounterTelegramBot(object):
                                                              [self.require_privmsg,
                                                               partial(self.require_flag, flag="admin")],
                                                              self.mow.reset))
-        self.dispatcher.add_handler(PermissionCommandHandler('mowrequeststicker',
-                                                             [self.require_privmsg],
-                                                             self.mow.request_sticker))
+        self.dispatcher.add_handler(ConversationHandler('mowrequeststicker',
+                                                        [self.require_privmsg],
+                                                        self.conversations,
+                                                        self.mow.request_sticker))
         self.dispatcher.add_handler(PermissionCommandHandler('mowstickers',
                                                              [self.require_privmsg],
                                                              self.mow.list_stickers))
-        self.dispatcher.add_handler(PermissionCommandHandler('mowreviewstickers',
-                                                             [self.require_privmsg,
-                                                              partial(self.require_flag, flag="admin")],
-                                                             self.mow.review_stickers))
+        self.dispatcher.add_handler(ConversationHandler('mowreviewstickers',
+                                                        [self.require_privmsg,
+                                                         partial(self.require_flag, flag="admin")],
+                                                        self.conversations,
+                                                        self.mow.review_stickers))
         self.dispatcher.add_handler(PermissionCommandHandler('mowgroups',
                                                              [self.require_privmsg,
                                                               partial(self.require_flag, flag="admin")],
                                                              self.mow.list_groups))
-        self.dispatcher.add_handler(PermissionCommandHandler('mowbroadcast',
-                                                             [self.require_privmsg,
-                                                              partial(self.require_flag, flag="admin")],
-                                                             self.mow.broadcast_message))
+        self.dispatcher.add_handler(ConversationHandler('mowbroadcast',
+                                                        [self.require_privmsg,
+                                                         partial(self.require_flag, flag="admin")],
+                                                        self.conversations,
+                                                        self.mow.broadcast_message))
 
         # On errors, just print to console and hope someone sees it
         self.dispatcher.add_error_handler(self.handle_error)
@@ -185,7 +188,7 @@ class MowCounterTelegramBot(object):
     def handle_cancel(self, bot, update):
         if update.message.chat.id < 0:
             return
-        if not self.conversations.cancel_conversation(bot, update):
+        if not self.conversations.cancel(bot, update):
             bot.sendMessage(update.message.chat.id,
                             text="Don't have anything to cancel!")
             self.handle_help(bot, update)
@@ -207,6 +210,10 @@ class MowCounterTelegramBotCLI(MowCounterTelegramBot):
         parser = argparse.ArgumentParser()
         parser.add_argument("-d", "--dbdir", dest="dbdir",
                             help="Directory for pickledb storage")
+        parser.add_argument("-r", "--rhost", dest="rhost",
+                            help="Host for redis db")
+        parser.add_argument("-p", "--rpass", dest="rpass",
+                            help="Password for redis db")
         parser.add_argument("-t", "--token", dest="token_file",
                             help="File containing telegram API token")
         args = parser.parse_args()
@@ -223,11 +230,12 @@ class MowCounterTelegramBotCLI(MowCounterTelegramBot):
             print("Cannot open token file!")
             raise RuntimeError()
 
-        if not args.dbdir or not os.path.isdir(args.dbdir):
-            print("Valid database directory required!")
+        if (not args.dbdir or not os.path.isdir(args.dbdir)) and (not rhost and not rpass):
+            print("Valid database directory or host required!")
             parser.print_help()
             raise RuntimeError()
-        super().__init__(args.dbdir, tg_token)
+
+        super().__init__(args.dbdir, tg_token)#rhost, rpass, tg_token)
 
 
 class MowCounterTelegramBotThread(MowCounterTelegramBot):

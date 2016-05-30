@@ -1,28 +1,181 @@
-from .base import MetafetishPickleDBBase
+from .base import MetafetishModuleBase
+import redis
 
 
-class MowCounter(MetafetishPickleDBBase):
+class MowCounterTransactions(object):
+    def __init__(self):
+        pass
+
+    def add_sticker_request(self, user_id, file_id):
+        pass
+
+    def remove_sticker_request(self, file_id):
+        pass
+
+    def add_sticker(self, user_id, file_id, value):
+        pass
+
+    def remove_sticker(self, file_id):
+        pass
+
+    def get_stickers(self):
+        pass
+
+    def update_mow_count(self, user_id, group_id, mow_count):
+        pass
+
+    def reset_counts(self):
+        pass
+
+    def get_group_list(self):
+        pass
+
+    def get_own_count(self, user_id):
+        pass
+
+    def get_group_top10(self, group_id):
+        pass
+
+    def get_global_top10(self, group_id):
+        pass
+
+
+class MowRedisTransactions(MowCounterTransactions):
+    def __init__(self):
+        # self.redis = redis.StrictRedis(host='localhost',
+        #                                db=0,
+        #                                decode_responses=True)
+
+    def add_sticker_request(self, user_id, file_id):
+        self.redis.hmset("sticker-requests", {file_id: user_id})
+
+    def remove_sticker_request(self, file_id):
+        self.redis.hdel("sticker-requests", file_id)
+
+    def get_sticker_requests(self):
+        return self.redis.hgetall("sticker-requests")
+
+    def get_stickers(self):
+        return self.redis.hgetall("sticker-values")
+
+    def get_sticker_value(self, sticker_id):
+        v = self.redis.hget("sticker-values", sticker_id)
+        if v is not None:
+            return int(v)
+        return None
+
+    def get_user(self, user_id):
+        return self.redis.hgetall(user_id)
+
+    def add_sticker(self, user_id, file_id, value):
+        self.redis.hset("sticker-values", file_id, value)
+        self.redis.hset("sticker-users", file_id, user_id)
+
+    def remove_sticker(self, file_id):
+        self.redis.hdel("sticker-values", file_id)
+        self.redis.hdel("sticker-users", file_id)
+
+    def get_sticker_values(self):
+        return self.redis.hgetall("sticker-values")
+
+    def update_mow_count(self, user_id, user_username, user_fname,
+                         user_lname, group_id, group_title, mow_count):
+        user_id = str(user_id)
+        group_id = str(group_id)
+        self.redis.hmset(user_id,
+                         {"username": user_username,
+                          "first-name": user_fname,
+                          "last-name": user_lname})
+        self.redis.sadd("groups", group_id)
+        self.redis.hmset(group_id, {"title": group_title})
+        self.redis.zincrby("user-scores", user_id, mow_count)
+        self.redis.zincrby(group_id + "-scores", user_id, mow_count)
+
+    def get_group_list(self):
+        return self.redis.smembers("groups")
+
+    def get_group(self, group_id):
+        return self.redis.hgetall(group_id)
+
+    def add_group(self, group_id):
+        self.redis.sadd("groups", group_id)
+
+    def reset_counts(self):
+        self.redis.delete("user-scores")
+        groups = self.redis.smembers("groups")
+        for g in groups:
+            self.redis.delete(g + "-scores")
+
+    def get_own_count(self, user_id, group_id):
+        user_id = str(user_id)
+        group_id = str(group_id)
+        r = {"local_score": 0,
+             "local_rank": 0,
+             "local_total": 0,
+             "global_score": 0,
+             "global_rank": 0,
+             "global_total": 0}
+
+        # global score
+        r["global_score"] = self.redis.zscore("user-scores", user_id)
+        if r["global_score"] is None:
+            return None
+        # global rank
+        r["global_rank"] = self.redis.zrevrank("user-scores", user_id)
+        # global total
+        r["global_total"] = self.redis.zcard("user-scores")
+
+        # local score
+        r["local_score"] = self.redis.zscore(group_id + "-scores", user_id)
+        # local rank
+        r["local_rank"] = self.redis.zrevrank(group_id + "-scores", user_id)
+        # local total
+        r["local_total"] = self.redis.zcard(group_id + "-scores")
+        if not r["local_score"]:
+            r["local_score"] = 0
+            if not r["local_total"]:
+                r["local_total"] = 0
+            r["local_rank"] = r["local_total"]
+        return r
+
+    def get_group_top10(self, group_id):
+        group_id = str(group_id)
+        top10 = self.redis.zrevrange(group_id + "-scores", 0, 10,
+                                     withscores=True, score_cast_func=int)
+        top10list = []
+        for (user_id, score) in top10:
+            user_dict = {}
+            u = self.redis.hgetall(user_id)
+            user_dict["name"] = u["first-name"] + u["last-name"]
+            user_dict["score"] = score
+            top10list.append(user_dict)
+        return top10list
+
+    def get_global_top10(self, group_id):
+        group_id = str(group_id)
+        top10 = self.redis.zrevrange("user-scores", 0, 10,
+                                     withscores=True, score_cast_func=int)
+        top10list = []
+        for (user_id, score) in top10:
+            user_dict = {}
+            u = self.redis.hgetall(user_id)
+            user_dict["name"] = u["first-name"] + u["last-name"]
+            user_dict["score"] = score
+            top10list.append(user_dict)
+        return top10list
+
+
+class MowMySQLTransactions(MowCounterTransactions):
+    pass
+
+
+class MowCounter(MetafetishModuleBase):
     def __init__(self, dbdir, cm):
-        # Don't save on every write transactions. Fucking noisy sneps.
-        super().__init__(__name__, dbdir, "mowcounter", False)
-        self.stickers = self.db.get("stickers")
-        # stickers used to be a list. Now it should be a dict
-        if self.stickers is None or type(self.stickers) is list:
-            self.db.dcreate("stickers")
-            self.stickers = self.db.dgetall("stickers")
-        self.sticker_requests = self.db.get("sticker_requests")
-        if self.sticker_requests is None:
-            self.db.lcreate("sticker_requests")
-            self.sticker_requests = self.db.get("sticker_requests")
-        if self.db.get("mowers") is None:
-            self.db.dcreate("mowers")
-        self.mowers = self.db.dgetall("mowers")
-        if self.db.get("mowgroups") is None:
-            self.db.dcreate("mowgroups")
-        self.mowgroups = self.db.dgetall("mowgroups")
+        super().__init__(__name__)
+        self.store = MowRedisTransactions()
         self.cm = cm
 
-    def add_sticker_conversation(self, bot, update):
+    def rm_sticker(self, bot, update):
         sticker = None
         while True:
             bot.sendMessage(update.message.chat.id,
@@ -33,51 +186,17 @@ class MowCounter(MetafetishPickleDBBase):
                 break
             bot.sendMessage(update.message.chat.id,
                             text="That's not a sticker!")
-        if sticker.file_id in self.stickers:
+        if sticker.file_id not in self.store.get_stickers().keys():
             bot.sendMessage(update.message.chat.id,
-                            text="I'm already counting that sticker!")
+                            text="I don't know that sticker!")
             return
-        self.stickers.append(sticker.file_id)
-        self.db.ladd("stickers", sticker.file_id)
-        self.db.dump()
-        bot.sendMessage(update.message.chat.id,
-                        text="Sticker added!")
-
-    def rm_sticker_conversation(self, bot, update):
-        sticker = None
-        while True:
-            bot.sendMessage(update.message.chat.id,
-                            text="Send me the sticker you'd like to add, or /cancel.")
-            (bot, update) = yield
-            if update.message.sticker is not None:
-                sticker = update.message.sticker
-                break
-            bot.sendMessage(update.message.chat.id,
-                            text="That's not a sticker!")
-        if sticker.file_id in self.stickers:
-            bot.sendMessage(update.message.chat.id,
-                            text="I'm already counting that sticker!")
-            return
-        self.stickers.remove(sticker.file_id)
-        self.db.lrem(sticker.file_id)
-        self.db.dump()
+        self.store.remove_sticker(sticker.file_id)
         bot.sendMessage(update.message.chat.id,
                         text="Sticker removed!")
 
-    def add_sticker(self, bot, update):
-        c = self.add_sticker_conversation(bot, update)
-        c.send(None)
-        self.cm.add(update, c)
-
-    def rm_sticker(self, bot, update):
-        c = self.rm_sticker_conversation(bot, update)
-        c.send(None)
-        self.cm.add(update, c)
-
     def check_mows(self, bot, update):
-        user_id = str(update.message.from_user.id)
-        chat_id = str(update.message.chat.id)
         user = update.message.from_user
+        chat = update.message.chat
         mows = 0
         # The API tests for text as either text or '', not None. God damnit.
         if len(update.message.text) is not 0:
@@ -86,99 +205,70 @@ class MowCounter(MetafetishPickleDBBase):
         elif update.message.sticker is not None:
             sticker = update.message.sticker
             # Make sure we have the sticker and it's accepted
-            if sticker.file_id not in self.stickers.keys():
+            value = self.store.get_sticker_value(sticker.file_id)
+            if value is None:
                 return
-            mows = self.stickers[sticker.file_id]
+            mows = value
         if mows is 0:
             return
-        self.logger.warn("Counted %d mows" % mows)
-        if user_id not in self.mowers.keys():
-            self.mowers[user_id] = { "mows": mows,
-                                     "first_name": user.first_name,
-                                     "last_name": user.last_name
-                                     }
-        else:
-            self.mowers[user_id] = { "mows": mows + self.mowers[user_id]["mows"],
-                                     "first_name": user.first_name,
-                                     "last_name": user.last_name
-                                     }
-        # We know that we'll have names stored in the global table, so just
-        # store id and count in group tables.
-        if chat_id not in self.mowgroups.keys():
-            self.mowgroups[chat_id] = {}
-        if user_id not in self.mowgroups[chat_id].keys():
-            self.mowgroups[chat_id][user_id] = mows
-        else:
-            self.mowgroups[chat_id][user_id] += mows
+        self.store.update_mow_count(user.id, user.username, user.first_name,
+                                    user.last_name, chat.id, chat.title, mows)
 
     def dump(self):
-        self.db.dump()
+        pass
 
     def show_own_count(self, bot, update):
         user_id = str(update.message.from_user.id)
         chat_id = str(update.message.chat.id)
         user = update.message.from_user
-        if user_id not in self.mowers.keys():
+        r = self.store.get_own_count(user_id, chat_id)
+        if r is None:
             bot.sendMessage(update.message.chat.id,
                             text="%s %s has no mows!" % (user.first_name, user.last_name))
             return
-        globallist = sorted(self.mowers.items(),
-                            key=lambda x: x[1]["mows"], reverse=True)
-        global_rank = [x[0] for x in globallist].index(user_id) + 1
-        global_size = len(globallist)
-        group_mows = 0
-        group_rank = 0
-        group_size = 0
-        if chat_id in self.mowgroups and user_id in self.mowgroups[chat_id]:
-            group_mows = self.mowgroups[chat_id][user_id]
-            grouplist = sorted(self.mowgroups[chat_id].items(),
-                               key=lambda x: x[1], reverse=True)
-            group_rank = [x[0] for x in grouplist].index(user_id) + 1
-            group_size = len(grouplist)
         bot.sendMessage(update.message.chat.id,
-                        text="%s %s has mowed %d times in this group (Rank: %d of %d), and %d times globally (Rank: %d of %d)." % (user.first_name, user.last_name, group_mows, group_rank, group_size, self.mowers[user_id]["mows"], global_rank, global_size))
-        self.db.dump()
+                        text="%s %s has mowed %d times in this group (Rank: %d of %d), and %d times globally (Rank: %d of %d)." %
+                        (user.first_name, user.last_name,
+                         r["local_score"], r["local_rank"] + 1, r["local_total"],
+                         r["global_score"], r["global_rank"] + 1, r["global_total"]))
 
     def show_top10_count(self, bot, update):
         chat_id = str(update.message.chat.id)
-        grouptop10 = ""
-        if chat_id in self.mowgroups.keys():
-            groupmowers = sorted(self.mowgroups[chat_id].items(),
-                                 key=lambda x: x[1], reverse=True)[:10]
-            grouptop10 = "<b>Top 10 Mowers in this group:</b>\n\n"
-            i = 0
-            for (id, mower_count) in groupmowers:
-                i += 1
-                grouptop10 += "<b>%d.</b> %s %s - %d Mows\n" % (i, self.mowers[id]["first_name"], self.mowers[id]["last_name"], mower_count)
-        globalmowers = sorted(self.mowers.items(), key=lambda x: x[1]["mows"], reverse=True)[:10]
-        globaltop10 = "\n\n<b>Top 10 Mowers globally:</b>\n\n"
-        i = 0
-        for (id, mower) in globalmowers:
+        group_top10 = self.store.get_group_top10(chat_id)
+        global_top10 = self.store.get_global_top10(chat_id)
+        msg = "<b>Top 10 Count for Group '%s':</b>\n\n" % update.message.chat.title
+        i = 1
+        for u in group_top10:
+            msg += "<b>%d.</b> %s - %s\n" % (i, u["name"], u["score"])
             i += 1
-            globaltop10 += "<b>%d.</b> %s %s - %d Mows\n" % (i, mower["first_name"], mower["last_name"], mower["mows"])
+        msg += "\n<b>Top 10 Count Globally:</b>\n\n"
+        i = 1
+        for u in global_top10:
+            msg += "<b>%d.</b> %s - %s\n" % (i, u["name"], u["score"])
+            i += 1
         bot.sendMessage(update.message.chat.id,
-                        text=grouptop10,# + globaltop10,
+                        text=msg,
                         parse_mode="HTML")
-        self.db.dump()
 
     def list_groups(self, bot, update):
         group_names = []
-        for g in self.mowgroups.keys():
+        for g in self.store.get_group_list():
             chat = bot.getChat(g)
             group_names.append("%s - @%s - %s %s - %s" % (chat.title, chat.username, chat.first_name, chat.last_name, g))
         bot.sendMessage(update.message.chat.id,
                         text="Groups I am currently counting mows in:\n %s" % "\n".join(group_names))
+        pass
 
     def list_stickers(self, bot, update):
         bot.sendMessage(update.message.chat.id,
                         text="Here's the list of stickers that count for/against mow counts:")
-        for (k, v) in self.stickers.items():
+        for (k, v) in self.store.get_stickers().items():
             bot.sendSticker(update.message.chat.id,
                             k)
             bot.sendMessage(update.message.chat.id,
-                            text="^^^^ Sticker Value: %d" % v)
+                            text="^^^^ Sticker Value: %d" % int(v))
 
-    def request_sticker_conversation(self, bot, update):
+    def request_sticker(self, bot, update):
         sticker = None
         while True:
             bot.sendMessage(update.message.chat.id,
@@ -189,37 +279,30 @@ class MowCounter(MetafetishPickleDBBase):
                 break
             bot.sendMessage(update.message.chat.id,
                             text="That's not a sticker!")
-        if sticker.file_id in self.stickers.keys() or sticker.file_id in self.sticker_requests:
+        if sticker.file_id in self.store.get_stickers().keys() or sticker.file_id in self.store.get_sticker_requests().keys():
             bot.sendMessage(update.message.chat.id,
                             text="I'm already tracking or waiting to review that sticker!")
             return
-        self.db.ladd("sticker_requests", sticker.file_id)
-        self.db.dump()
+        self.store.add_sticker_request(update.message.from_user.id,
+                                       sticker.file_id)
         bot.sendMessage(update.message.chat.id,
                         text="Sticker requested! The admins will review the sticker and add it if it is mow-worthy. Thanks!")
 
-    def request_sticker(self, bot, update):
-        c = self.request_sticker_conversation(bot, update)
-        c.send(None)
-        self.cm.add(update, c)
-
-    def review_stickers_conversation(self, bot, update):
-        while len(self.sticker_requests) > 0:
-            s = self.sticker_requests[0]
+    def review_stickers(self, bot, update):
+        for (sticker_id, user_id) in self.store.get_sticker_requests().items():
             while True:
                 bot.sendSticker(update.message.chat.id,
-                                s)
+                                sticker_id)
                 bot.sendMessage(update.message.chat.id,
                                 text="Send 0 to reject sticker, or a pos/neg int to specify sticker value, or /cancel.")
                 (bot, update) = yield
                 try:
                     value = int(update.message.text)
                     if value != 0:
-                        self.stickers[s] = value
+                        self.store.add_sticker(user_id, sticker_id, value)
                         bot.sendMessage(update.message.chat.id,
                                         text="Sticker added with value %d" % value)
-                    self.sticker_requests.remove(s)
-                    self.db.dump()
+                    self.store.remove_sticker_request(sticker_id)
                     break
                 except:
                     continue
@@ -227,31 +310,16 @@ class MowCounter(MetafetishPickleDBBase):
                         text="Sticker review done!")
 
     def reset(self, bot, update):
-        for u in self.mowers.keys():
-            self.mowers = {}
-        for g in self.mowgroups.keys():
-            for u in self.mowgroups[g].keys():
-                self.mowgroups[g] = {}
-        self.db.dump()
+        self.store.reset_counts()
         bot.sendMessage(update.message.chat.id,
                         text="Mow counts reset!")
 
-    def review_stickers(self, bot, update):
-        c = self.review_stickers_conversation(bot, update)
-        c.send(None)
-        self.cm.add(update, c)
-
-    def broadcast_message_conversation(self, bot, update):
+    def broadcast_message(self, bot, update):
         bot.sendMessage(update.message.chat.id,
                         text="What message would you like to broadcast to groups I'm in?")
         (bot, update) = yield
         message = update.message.text
-        for g in self.mowgroups.keys():
+        groups = self.store.get_group_list()
+        for g in groups:
             bot.sendMessage(g,
                             text=message)
-
-    def broadcast_message(self, bot, update):
-        c = self.broadcast_message_conversation(bot, update)
-        c.send(None)
-        self.cm.add(update, c)
-
