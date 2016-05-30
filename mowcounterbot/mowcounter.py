@@ -239,12 +239,12 @@ class MowCounter(MetafetishModuleBase):
         msg = "<b>Top 10 Count for Group '%s':</b>\n\n" % update.message.chat.title
         i = 1
         for u in group_top10:
-            msg += "<b>%d.</b> %s - %s\n" % (i, u["name"], u["score"])
+            msg += cgi.escape("<b>%d.</b> %s - %s\n" % (i, u["name"], u["score"]))
             i += 1
         msg += "\n<b>Top 10 Count Globally:</b>\n\n"
         i = 1
         for u in global_top10:
-            msg += "<b>%d.</b> %s - %s\n" % (i, u["name"], u["score"])
+            msg += cgi.escape("<b>%d.</b> %s - %s\n" % (i, u["name"], u["score"]))
             i += 1
         bot.sendMessage(update.message.chat.id,
                         text=msg,
@@ -253,7 +253,11 @@ class MowCounter(MetafetishModuleBase):
     def list_groups(self, bot, update):
         group_names = []
         for g in self.store.get_group_list():
-            chat = bot.getChat(g)
+            try:
+                chat = bot.getChat(g)
+            except:
+                print("Cannot access chat %s?" % g)
+                continue
             status = bot.getChatMember(g, bot.id)
             group_names.append("%s - @%s - %s - %s" % (chat.title, chat.username, g, status.status))
         bot.sendMessage(update.message.chat.id,
