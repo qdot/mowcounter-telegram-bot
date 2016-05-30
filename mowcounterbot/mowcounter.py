@@ -254,7 +254,8 @@ class MowCounter(MetafetishModuleBase):
         group_names = []
         for g in self.store.get_group_list():
             chat = bot.getChat(g)
-            group_names.append("%s - @%s - %s %s - %s" % (chat.title, chat.username, chat.first_name, chat.last_name, g))
+            status = bot.getChatMember(g, bot.id)
+            group_names.append("%s - @%s - %s - %s" % (chat.title, chat.username, g, status.status))
         bot.sendMessage(update.message.chat.id,
                         text="Groups I am currently counting mows in:\n %s" % "\n".join(group_names))
         pass
