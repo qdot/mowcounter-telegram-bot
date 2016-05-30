@@ -141,7 +141,7 @@ class MowRedisTransactions(MowCounterTransactions):
 
     def get_group_top10(self, group_id):
         group_id = str(group_id)
-        top10 = self.redis.zrevrange(group_id + "-scores", 0, 10,
+        top10 = self.redis.zrevrange(group_id + "-scores", 0, 9,
                                      withscores=True, score_cast_func=int)
         top10list = []
         for (user_id, score) in top10:
@@ -154,7 +154,7 @@ class MowRedisTransactions(MowCounterTransactions):
 
     def get_global_top10(self, group_id):
         group_id = str(group_id)
-        top10 = self.redis.zrevrange("user-scores", 0, 10,
+        top10 = self.redis.zrevrange("user-scores", 0, 9,
                                      withscores=True, score_cast_func=int)
         top10list = []
         for (user_id, score) in top10:
