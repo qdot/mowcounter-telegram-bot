@@ -1,5 +1,6 @@
 from .base import MetafetishModuleBase
 import redis
+import cgi
 
 
 class MowCounterTransactions(object):
