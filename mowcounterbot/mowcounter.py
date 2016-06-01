@@ -165,6 +165,21 @@ class MowRedisTransactions(MowCounterTransactions):
             top10list.append(user_dict)
         return top10list
 
+    def get_own_group_count(self, user_id):
+        # Get all group keys
+        groups = self.get_group_list()
+        scores = {}
+        for group_id in groups:
+            score_hash = group_id + "-scores"
+            score = self.redis.zscore(score_hash, user_id)
+            if score is None:
+                continue
+            group_info = self.get_group(group_id)
+            scores[group_info["title"]] = {}
+            scores[group_info["title"]]["score"] = score
+            scores[group_info["title"]]["rank"] = self.redis.zrevrank(score_hash, user_id)
+            scores[group_info["title"]]["size"] = self.redis.zcard(score_hash)
+        return scores
 
 class MowMySQLTransactions(MowCounterTransactions):
     pass
@@ -230,11 +245,19 @@ class MowCounter(MetafetishModuleBase):
             bot.sendMessage(update.message.chat.id,
                             text="%s %s has no mows!" % (user.first_name, user.last_name))
             return
+        status_msg = ("%s has mowed %d times in this group (Rank: %d of %d), and %d times globally (Rank: %d of %d)." %
+                      ((user.first_name + ((" " + user.last_name) if len(user.last_name) > 0 else "")),
+                       r["local_score"], r["local_rank"] + 1, r["local_total"],
+                       r["global_score"], r["global_rank"] + 1, r["global_total"]))
+        if (update.message.chat.id > 0):
+            status_msg += "\n\n"
+            scores = self.store.get_own_group_count(user_id)
+            for (group_name, group_info) in scores.items():
+                status_msg += "%s\n" % (group_name)
+                status_msg += "Score: %d - Rank: %d of %d\n\n" % (group_info["score"], group_info["rank"], group_info["size"])
         bot.sendMessage(update.message.chat.id,
-                        text="%s has mowed %d times in this group (Rank: %d of %d), and %d times globally (Rank: %d of %d)." %
-                        ((user.first_name + ((" " + user.last_name) if len(user.last_name) > 0 else "")),
-                         r["local_score"], r["local_rank"] + 1, r["local_total"],
-                         r["global_score"], r["global_rank"] + 1, r["global_total"]))
+                        text=status_msg)
+        return
 
     def show_top10_count(self, bot, update):
         chat_id = str(update.message.chat.id)
