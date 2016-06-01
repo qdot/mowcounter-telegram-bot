@@ -181,6 +181,12 @@ class MowRedisTransactions(MowCounterTransactions):
             scores[group_info["title"]]["size"] = self.redis.zcard(score_hash)
         return scores
 
+    def get_total_mows(self):
+        all_scores = self.redis.zrange("user-scores", 0, -1,
+                                       withscores=True,
+                                       score_cast_func=int)
+        return sum([v[1] for v in all_scores])
+
 class MowMySQLTransactions(MowCounterTransactions):
     pass
 
@@ -245,10 +251,12 @@ class MowCounter(MetafetishModuleBase):
             bot.sendMessage(update.message.chat.id,
                             text="%s %s has no mows!" % (user.first_name, user.last_name))
             return
-        status_msg = ("%s has mowed %d times in this group (Rank: %d of %d), and %d times globally (Rank: %d of %d)." %
+        total_mows = self.store.get_total_mows()
+        status_msg = ("%s has mowed %d times in this group (Rank: %d of %d), and %d times globally (Rank: %d of %d, %f%% of Global Mows)." %
                       ((user.first_name + ((" " + user.last_name) if len(user.last_name) > 0 else "")),
                        r["local_score"], r["local_rank"] + 1, r["local_total"],
-                       r["global_score"], r["global_rank"] + 1, r["global_total"]))
+                       r["global_score"], r["global_rank"] + 1, r["global_total"],
+                       (r["global_score"] / total_mows) * 100))
         if (update.message.chat.id > 0):
             status_msg += "\n\n"
             scores = self.store.get_own_group_count(user_id)
@@ -273,6 +281,8 @@ class MowCounter(MetafetishModuleBase):
         for u in global_top10:
             msg += ("<b>%d.</b> " % (i)) + cgi.escape("%s - %s\n" % (u["name"], u["score"]))
             i += 1
+
+        msg += "\n\nTotal Mows: %d" % self.store.get_total_mows()
         bot.sendMessage(update.message.chat.id,
                         text=msg,
                         parse_mode="HTML")
