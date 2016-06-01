@@ -147,7 +147,7 @@ class MowRedisTransactions(MowCounterTransactions):
         for (user_id, score) in top10:
             user_dict = {}
             u = self.redis.hgetall(user_id)
-            user_dict["name"] = u["first-name"] + u["last-name"]
+            user_dict["name"] = u["first-name"] + ((" " + u["last-name"]) if len(u["last-name"]) > 0 else "")
             user_dict["score"] = score
             top10list.append(user_dict)
         return top10list
@@ -160,7 +160,7 @@ class MowRedisTransactions(MowCounterTransactions):
         for (user_id, score) in top10:
             user_dict = {}
             u = self.redis.hgetall(user_id)
-            user_dict["name"] = u["first-name"] + u["last-name"]
+            user_dict["name"] = u["first-name"] + ((" " + u["last-name"]) if len(u["last-name"]) > 0 else "")
             user_dict["score"] = score
             top10list.append(user_dict)
         return top10list
@@ -231,8 +231,8 @@ class MowCounter(MetafetishModuleBase):
                             text="%s %s has no mows!" % (user.first_name, user.last_name))
             return
         bot.sendMessage(update.message.chat.id,
-                        text="%s %s has mowed %d times in this group (Rank: %d of %d), and %d times globally (Rank: %d of %d)." %
-                        (user.first_name, user.last_name,
+                        text="%s has mowed %d times in this group (Rank: %d of %d), and %d times globally (Rank: %d of %d)." %
+                        ((user.first_name + ((" " + user.last_name) if len(user.last_name) > 0 else "")),
                          r["local_score"], r["local_rank"] + 1, r["local_total"],
                          r["global_score"], r["global_rank"] + 1, r["global_total"]))
 
