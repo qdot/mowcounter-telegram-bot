@@ -46,6 +46,11 @@ class MowRedisTransactions(MowCounterTransactions):
         # self.redis = redis.StrictRedis(host='localhost',
         #                                db=0,
         #                                decode_responses=True)
+        self.redis = redis.StrictRedis(host="pub-redis-19662.us-east-1-4.2.ec2.garantiadata.com",
+                                       port=19662,
+                                       password="lhja#%8hlW@m",
+                                       db=0,
+                                       decode_responses=True)
 
     def add_sticker_request(self, user_id, file_id):
         self.redis.hmset("sticker-requests", {file_id: user_id})
@@ -282,7 +287,7 @@ class MowCounter(MetafetishModuleBase):
             msg += ("<b>%d.</b> " % (i)) + cgi.escape("%s - %s\n" % (u["name"], u["score"]))
             i += 1
 
-        msg += "\n\nTotal Mows: %d" % self.store.get_total_mows()
+        msg += "\n\n<b>Total Mows:</b> %d" % self.store.get_total_mows()
         bot.sendMessage(update.message.chat.id,
                         text=msg,
                         parse_mode="HTML")
