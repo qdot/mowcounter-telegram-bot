@@ -1,2 +1,3 @@
 python-telegram-bot
 watchdog
+git+https://github.com/qdot/np-telegram-bot.git

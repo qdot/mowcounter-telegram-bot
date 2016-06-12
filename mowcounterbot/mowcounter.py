@@ -1,120 +1,68 @@
-from .base import MetafetishModuleBase
-import redis
+from nptelegrambot.base import NPModuleBase
+from nptelegrambot.chats import ChatRedisTransactions
+from nptelegrambot.users import UserRedisTransactions
 import cgi
 
 
-class MowCounterTransactions(object):
-    def __init__(self):
-        pass
+# Mowcounter needs to hit chat and user keys too, so just reuse the transaction
+# classes to make sure everything keeps the correct naming
+class MowRedisTransactions(ChatRedisTransactions, UserRedisTransactions):
+    def __init__(self, redis):
+        super().__init__(redis)
+        self.redis = redis
 
     def add_sticker_request(self, user_id, file_id):
-        pass
+        self.redis.hmset("mowcounter:sticker-requests", {file_id: user_id})
 
     def remove_sticker_request(self, file_id):
-        pass
-
-    def add_sticker(self, user_id, file_id, value):
-        pass
-
-    def remove_sticker(self, file_id):
-        pass
-
-    def get_stickers(self):
-        pass
-
-    def update_mow_count(self, user_id, group_id, mow_count):
-        pass
-
-    def reset_counts(self):
-        pass
-
-    def get_group_list(self):
-        pass
-
-    def get_own_count(self, user_id):
-        pass
-
-    def get_group_top10(self, group_id):
-        pass
-
-    def get_global_top10(self, group_id):
-        pass
-
-
-class MowRedisTransactions(MowCounterTransactions):
-    def __init__(self):
-        # self.redis = redis.StrictRedis(host='localhost',
-        #                                db=0,
-        #                                decode_responses=True)
-        self.redis = redis.StrictRedis(host="pub-redis-19662.us-east-1-4.2.ec2.garantiadata.com",
-                                       port=19662,
-                                       password="lhja#%8hlW@m",
-                                       db=0,
-                                       decode_responses=True)
-
-    def add_sticker_request(self, user_id, file_id):
-        self.redis.hmset("sticker-requests", {file_id: user_id})
-
-    def remove_sticker_request(self, file_id):
-        self.redis.hdel("sticker-requests", file_id)
+        self.redis.hdel("mowcounter:sticker-requests", file_id)
 
     def get_sticker_requests(self):
-        return self.redis.hgetall("sticker-requests")
+        return self.redis.hgetall("mowcounter:sticker-requests")
 
     def get_stickers(self):
-        return self.redis.hgetall("sticker-values")
+        return self.redis.hgetall("mowcounter:sticker-values")
 
     def get_sticker_value(self, sticker_id):
-        v = self.redis.hget("sticker-values", sticker_id)
+        v = self.redis.hget("mowcounter:sticker-values", sticker_id)
         if v is not None:
             return int(v)
         return None
 
-    def get_user(self, user_id):
-        return self.redis.hgetall(user_id)
-
     def add_sticker(self, user_id, file_id, value):
-        self.redis.hset("sticker-values", file_id, value)
-        self.redis.hset("sticker-users", file_id, user_id)
+        self.redis.hset("mowcounter:sticker-values", file_id, value)
+        self.redis.hset("mowcounter:sticker-users", file_id, user_id)
 
     def remove_sticker(self, file_id):
-        self.redis.hdel("sticker-values", file_id)
-        self.redis.hdel("sticker-users", file_id)
+        self.redis.hdel("mowcounter:sticker-values", file_id)
+        self.redis.hdel("mowcounter:sticker-users", file_id)
 
     def get_sticker_values(self):
-        return self.redis.hgetall("sticker-values")
+        return self.redis.hgetall("mowcounter:sticker-values")
 
     def update_mow_count(self, user_id, user_username, user_fname,
-                         user_lname, group_id, group_title, mow_count):
+                         user_lname, chat_id, chat_title, chat_username,
+                         mow_count):
         user_id = str(user_id)
-        group_id = str(group_id)
-        self.redis.hmset(user_id,
-                         {"username": user_username,
-                          "first-name": user_fname,
-                          "last-name": user_lname})
-        self.redis.sadd("groups", group_id)
-        self.redis.hmset(group_id, {"title": group_title})
-        self.redis.zincrby("user-scores", user_id, mow_count)
-        self.redis.zincrby(group_id + "-scores", user_id, mow_count)
-
-    def get_group_list(self):
-        return self.redis.smembers("groups")
-
-    def get_group(self, group_id):
-        return self.redis.hgetall(group_id)
-
-    def add_group(self, group_id):
-        self.redis.sadd("groups", group_id)
+        chat_id = str(chat_id)
+        # pipe = self.redis.pipeline()
+        self.add_user(user_id, user_username, user_fname, user_lname)
+        self.add_chat(chat_id, chat_title, chat_username)
+        self.update_chat_status(chat_id, "member")
+        self.redis.zincrby("mowcounter:user-scores", user_id, mow_count)
+        self.redis.zincrby("mowcounter:" + chat_id + "-scores",
+                           user_id,
+                           mow_count)
 
     def reset_counts(self):
         self.redis.delete("user-scores")
-        groups = self.redis.smembers("groups")
-        for g in groups:
-            self.redis.delete(g + "-scores")
+        chats = self.get_chats_ids()
+        for c in chats:
+            self.redis.delete("mowcounter:" + c + "-scores")
 
-    def get_own_count(self, user_id, group_id):
+    def get_own_count(self, user_id, chat_id):
         user_id = str(user_id)
-        group_id = str(group_id)
+        chat_id = str(chat_id)
         r = {"local_score": 0,
              "local_rank": 0,
              "local_total": 0,
@@ -123,20 +71,23 @@ class MowRedisTransactions(MowCounterTransactions):
              "global_total": 0}
 
         # global score
-        r["global_score"] = self.redis.zscore("user-scores", user_id)
+        r["global_score"] = self.redis.zscore("mowcounter:user-scores",
+                                              user_id)
         if r["global_score"] is None:
             return None
         # global rank
-        r["global_rank"] = self.redis.zrevrank("user-scores", user_id)
+        r["global_rank"] = self.redis.zrevrank("mowcounter:user-scores",
+                                               user_id)
         # global total
-        r["global_total"] = self.redis.zcard("user-scores")
+        r["global_total"] = self.redis.zcard("mowcounter:user-scores")
 
+        chat_key = "mowcounter:" + chat_id + "-scores"
         # local score
-        r["local_score"] = self.redis.zscore(group_id + "-scores", user_id)
+        r["local_score"] = self.redis.zscore(chat_key, user_id)
         # local rank
-        r["local_rank"] = self.redis.zrevrank(group_id + "-scores", user_id)
+        r["local_rank"] = self.redis.zrevrank(chat_key, user_id)
         # local total
-        r["local_total"] = self.redis.zcard(group_id + "-scores")
+        r["local_total"] = self.redis.zcard(chat_key)
         if not r["local_score"]:
             r["local_score"] = 0
             if not r["local_total"]:
@@ -144,63 +95,61 @@ class MowRedisTransactions(MowCounterTransactions):
             r["local_rank"] = r["local_total"]
         return r
 
-    def get_group_top10(self, group_id):
-        group_id = str(group_id)
-        top10 = self.redis.zrevrange(group_id + "-scores", 0, 9,
+    def get_chat_top10(self, chat_id):
+        chat_id = str(chat_id)
+        top10 = self.redis.zrevrange("mowcounter:" + chat_id + "-scores",
+                                     0, 9,
                                      withscores=True, score_cast_func=int)
         top10list = []
         for (user_id, score) in top10:
             user_dict = {}
             u = self.redis.hgetall(user_id)
-            user_dict["name"] = u["first-name"] + ((" " + u["last-name"]) if len(u["last-name"]) > 0 else "")
+            user_dict["name"] = u["firstname"] + ((" " + u["lastname"]) if len(u["lastname"]) > 0 else "")
             user_dict["score"] = score
             top10list.append(user_dict)
         return top10list
 
-    def get_global_top10(self, group_id):
-        group_id = str(group_id)
-        top10 = self.redis.zrevrange("user-scores", 0, 9,
+    def get_global_top10(self, chat_id):
+        chat_id = str(chat_id)
+        top10 = self.redis.zrevrange("mowcounter:user-scores", 0, 9,
                                      withscores=True, score_cast_func=int)
         top10list = []
         for (user_id, score) in top10:
             user_dict = {}
             u = self.redis.hgetall(user_id)
-            user_dict["name"] = u["first-name"] + ((" " + u["last-name"]) if len(u["last-name"]) > 0 else "")
+            user_dict["name"] = u["firstname"] + ((" " + u["lastname"]) if len(u["lastname"]) > 0 else "")
             user_dict["score"] = score
             top10list.append(user_dict)
         return top10list
 
-    def get_own_group_count(self, user_id):
-        # Get all group keys
-        groups = self.get_group_list()
+    def get_own_chat_count(self, user_id):
+        # Get all chat keys
+        chats = self.get_chat_ids()
         scores = {}
-        for group_id in groups:
-            score_hash = group_id + "-scores"
+        for chat_id in chats:
+            score_hash = "mowcounter:" + chat_id + "-scores"
             score = self.redis.zscore(score_hash, user_id)
             if score is None:
                 continue
-            group_info = self.get_group(group_id)
-            scores[group_info["title"]] = {}
-            scores[group_info["title"]]["score"] = score
-            scores[group_info["title"]]["rank"] = self.redis.zrevrank(score_hash, user_id)
-            scores[group_info["title"]]["size"] = self.redis.zcard(score_hash)
+            chat_info = self.get_chat(chat_id)
+            scores[chat_info["title"]] = {}
+            scores[chat_info["title"]]["score"] = score
+            scores[chat_info["title"]]["rank"] = self.redis.zrevrank(score_hash,
+                                                                      user_id)
+            scores[chat_info["title"]]["size"] = self.redis.zcard(score_hash)
         return scores
 
     def get_total_mows(self):
-        all_scores = self.redis.zrange("user-scores", 0, -1,
+        all_scores = self.redis.zrange("mowcounter:user-scores", 0, -1,
                                        withscores=True,
                                        score_cast_func=int)
         return sum([v[1] for v in all_scores])
 
-class MowMySQLTransactions(MowCounterTransactions):
-    pass
 
-
-class MowCounter(MetafetishModuleBase):
-    def __init__(self, dbdir, cm):
+class MowCounter(NPModuleBase):
+    def __init__(self, store):
         super().__init__(__name__)
-        self.store = MowRedisTransactions()
-        self.cm = cm
+        self.store = MowRedisTransactions(store)
 
     def rm_sticker(self, bot, update):
         sticker = None
@@ -242,10 +191,8 @@ class MowCounter(MetafetishModuleBase):
         if mows is 0:
             return
         self.store.update_mow_count(user.id, user.username, user.first_name,
-                                    user.last_name, chat.id, chat.title, mows)
-
-    def dump(self):
-        pass
+                                    user.last_name, chat.id, chat.title,
+                                    chat.username, mows)
 
     def show_own_count(self, bot, update):
         user_id = str(update.message.from_user.id)
@@ -257,28 +204,28 @@ class MowCounter(MetafetishModuleBase):
                             text="%s %s has no mows!" % (user.first_name, user.last_name))
             return
         total_mows = self.store.get_total_mows()
-        status_msg = ("%s has mowed %d times in this group (Rank: %d of %d), and %d times globally (Rank: %d of %d, %f%% of Global Mows)." %
+        status_msg = ("%s has mowed %d times in this chat (Rank: %d of %d), and %d times globally (Rank: %d of %d, %f%% of Global Mows)." %
                       ((user.first_name + ((" " + user.last_name) if len(user.last_name) > 0 else "")),
                        r["local_score"], r["local_rank"] + 1, r["local_total"],
                        r["global_score"], r["global_rank"] + 1, r["global_total"],
                        (r["global_score"] / total_mows) * 100))
         if (update.message.chat.id > 0):
             status_msg += "\n\n"
-            scores = self.store.get_own_group_count(user_id)
-            for (group_name, group_info) in scores.items():
-                status_msg += "%s\n" % (group_name)
-                status_msg += "Score: %d - Rank: %d of %d\n\n" % (group_info["score"], group_info["rank"], group_info["size"])
+            scores = self.store.get_own_chat_count(user_id)
+            for (chat_name, chat_info) in scores.items():
+                status_msg += "%s\n" % (chat_name)
+                status_msg += "Score: %d - Rank: %d of %d\n\n" % (chat_info["score"], chat_info["rank"], chat_info["size"])
         bot.sendMessage(update.message.chat.id,
                         text=status_msg)
         return
 
     def show_top10_count(self, bot, update):
         chat_id = str(update.message.chat.id)
-        group_top10 = self.store.get_group_top10(chat_id)
+        chat_top10 = self.store.get_chat_top10(chat_id)
         global_top10 = self.store.get_global_top10(chat_id)
-        msg = "<b>Top 10 Count for Group '%s':</b>\n\n" % update.message.chat.title
+        msg = "<b>Top 10 Count for Chat '%s':</b>\n\n" % update.message.chat.title
         i = 1
-        for u in group_top10:
+        for u in chat_top10:
             msg += ("<b>%d.</b> " % (i)) + cgi.escape("%s - %s\n" % (u["name"], u["score"]))
             i += 1
         msg += "\n<b>Top 10 Count Globally:</b>\n\n"
@@ -291,20 +238,6 @@ class MowCounter(MetafetishModuleBase):
         bot.sendMessage(update.message.chat.id,
                         text=msg,
                         parse_mode="HTML")
-
-    def list_groups(self, bot, update):
-        group_names = []
-        for g in self.store.get_group_list():
-            try:
-                chat = bot.getChat(g)
-            except:
-                print("Cannot access chat %s?" % g)
-                continue
-            status = bot.getChatMember(g, bot.id)
-            group_names.append("%s - @%s - %s - %s" % (chat.title, chat.username, g, status.status))
-        bot.sendMessage(update.message.chat.id,
-                        text="Groups I am currently counting mows in:\n %s" % "\n".join(group_names))
-        pass
 
     def list_stickers(self, bot, update):
         bot.sendMessage(update.message.chat.id,
@@ -360,13 +293,3 @@ class MowCounter(MetafetishModuleBase):
         self.store.reset_counts()
         bot.sendMessage(update.message.chat.id,
                         text="Mow counts reset!")
-
-    def broadcast_message(self, bot, update):
-        bot.sendMessage(update.message.chat.id,
-                        text="What message would you like to broadcast to groups I'm in?")
-        (bot, update) = yield
-        message = update.message.text
-        groups = self.store.get_group_list()
-        for g in groups:
-            bot.sendMessage(g,
-                            text=message)

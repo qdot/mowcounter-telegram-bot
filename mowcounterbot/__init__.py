@@ -1,3 +1,3 @@
-from .bot import MowCounterTelegramBotCLI, MowCounterTelegramBotThread
+from .bot import create_webhook_bot, MowCounterTelegramBot
 
-__all__ = ["MowCounterTelegramBotCLI", "MowCounterTelegramBotThread"]
+__all__ = ["MowCounterTelegramBot", "create_webhook_bot"]
