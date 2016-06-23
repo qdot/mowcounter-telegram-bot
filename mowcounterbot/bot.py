@@ -18,12 +18,12 @@ class MowCounterTelegramBot(NPTelegramBot):
         self.dispatcher.add_handler(MessageHandler([Filters.text,
                                                     Filters.sticker],
                                                    self.handle_mow), group=3)
-        self.dispatcher.add_handler(MessageHandler([Filters.text,
-                                                    Filters.sticker],
-                                                   self.chats.run_join_checks), group=4)
+        # self.dispatcher.add_handler(MessageHandler([Filters.text,
+        #                                             Filters.sticker],
+        #                                            self.chats.run_join_checks), group=4)
 
         self.chats.add_join_filter(partial(ChatFilters.min_size_filter,
-                                           min_size=10))
+                                           min_size=5))
 
         # Definition module commands
         self.dispatcher.add_handler(PermissionCommandHandler('mowtop10',
